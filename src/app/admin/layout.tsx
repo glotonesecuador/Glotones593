@@ -7,6 +7,7 @@ import {
   ShoppingCart, ChefHat, ClipboardList, TrendingUp,
   UtensilsCrossed, Package, Truck, BarChart3,
   DollarSign, Settings, LogOut, Menu, Store, ChevronRight,
+  Users,
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -15,6 +16,7 @@ const NAV = [
   { href: '/admin/cocina',     label: 'Cocina (KDS)',    icon: ChefHat,         color: 'text-orange-400' },
   { href: '/admin/pedidos',    label: 'Pedidos',         icon: ClipboardList,   color: 'text-blue-400'   },
   { href: '/admin/finanzas',   label: 'Finanzas',        icon: TrendingUp,      color: 'text-green-400'  },
+  { href: '/admin/clientes',   label: 'Clientes CRM',    icon: Users,           color: 'text-rose-400'   },
   { href: '/admin/catalogo',   label: 'Catálogo & Menú', icon: UtensilsCrossed, color: 'text-purple-400' },
   { href: '/admin/inventario', label: 'Inventario',      icon: Package,         color: 'text-cyan-400'   },
   { href: '/admin/compras',    label: 'Compras',         icon: Truck,           color: 'text-indigo-400' },

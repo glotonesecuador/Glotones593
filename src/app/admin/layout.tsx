@@ -1,19 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { signOut, useSession, SessionProvider } from 'next-auth/react'
 import {
   ShoppingCart, ChefHat, ClipboardList, TrendingUp,
   UtensilsCrossed, Package, Truck, BarChart3,
   DollarSign, Settings, LogOut, Menu, Store, ChevronRight,
-  Users,
+  Users, MapPin, Timer
 } from 'lucide-react'
 import clsx from 'clsx'
 
 const NAV = [
   { href: '/admin/ventas',     label: 'Ventas (POS)',    icon: ShoppingCart,    color: 'text-yellow-400' },
   { href: '/admin/cocina',     label: 'Cocina (KDS)',    icon: ChefHat,         color: 'text-orange-400' },
+  { href: '/admin/tiempos',    label: 'Cronómetros',     icon: Timer,           color: 'text-red-400'    },
   { href: '/admin/pedidos',    label: 'Pedidos',         icon: ClipboardList,   color: 'text-blue-400'   },
   { href: '/admin/finanzas',   label: 'Finanzas',        icon: TrendingUp,      color: 'text-green-400'  },
   { href: '/admin/clientes',   label: 'Clientes CRM',    icon: Users,           color: 'text-rose-400'   },
@@ -25,23 +26,68 @@ const NAV = [
   { href: '/admin/config',     label: 'Configuración',   icon: Settings,        color: 'text-gray-400'   },
 ]
 
+// NUEVAS SUCURSALES (Ajusta los IDs según tu base de datos)
+const SUCURSALES = [
+  { id: 'cd-rio-1', name: 'Ciudad del Río 1' },
+  { id: 'sur-guayaquil', name: 'Glotones Sur' },
+]
+
 function AdminLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router   = useRouter()
   const { data: session } = useSession()
   const [open, setOpen] = useState(false)
+  const [sucursal, setSucursal] = useState('todas')
+  const [sucursales, setSucursales] = useState<any[]>([]) // Estado para la lista real
+
+  // 1. CARGAR SUCURSALES DESDE LA DB
+  useEffect(() => {
+    fetch('/api/locations')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setSucursales(data)
+      })
+
+    const saved = localStorage.getItem('sucursal_activa')
+    if (saved) setSucursal(saved)
+  }, [])
+
+  const cambiarSucursal = (id: string) => {
+    setSucursal(id)
+    localStorage.setItem('sucursal_activa', id)
+    window.location.reload()
+  }
 
   if (pathname === '/admin/login') return <>{children}</>
 
   const Sidebar = () => (
     <div className="flex flex-col h-full">
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-white/10">
-        <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center">
-          <Store className="w-5 h-5 text-white" />
+      <div className="flex flex-col gap-4 px-5 py-5 border-b border-white/10">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center">
+            <Store className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <p className="font-display font-bold text-white text-sm">Glotones 593</p>
+            <p className="text-white/50 text-xs uppercase font-black tracking-widest">Panel Admin</p>
+          </div>
         </div>
-        <div>
-          <p className="font-display font-bold text-white text-sm">Glotones 593</p>
-          <p className="text-white/50 text-xs">Panel Admin</p>
+
+        {/* SELECTOR DINÁMICO */}
+        <div className="relative group">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2">
+            <MapPin className="w-3.5 h-3.5 text-purple-300" />
+          </div>
+          <select 
+            value={sucursal}
+            onChange={(e) => cambiarSucursal(e.target.value)}
+            className="w-full bg-white/10 hover:bg-white/20 border border-white/10 text-white text-[11px] font-bold rounded-xl py-2.5 pl-9 pr-3 appearance-none cursor-pointer transition-all focus:outline-none"
+          >
+            <option value="todas" className="text-gray-800">🌍 Todas las Sucursales</option>
+            {sucursales.map(s => (
+              <option key={s.id} value={s.id} className="text-gray-800">📍 {s.name}</option>
+            ))}
+          </select>
         </div>
       </div>
 

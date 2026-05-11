@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { useState, useEffect, useMemo } from 'react'
 import {
   ShoppingBag, MapPin, X, CheckCircle, Plus, Minus,
-  Search, ChevronDown, User, Lock, MessageCircle
+  Search, ChevronDown, User, Lock, MessageCircle, UploadCloud
 } from 'lucide-react'
 import type { Product, OrderItem } from '@/types'
 import clsx from 'clsx'
@@ -29,6 +29,10 @@ export default function MenuPublico() {
   const [method, setMethod]           = useState('Efectivo')
   const [enviando, setEnviando]       = useState(false)
   const [ordenId, setOrdenId]         = useState('')
+  
+  // Nuevo estado para el comprobante de transferencia
+  const [comprobante, setComprobante] = useState<File | null>(null)
+
   const [accessModal, setAccessModal] = useState(false)
   const [phoneSearch, setPhoneSearch] = useState('')
   const [foundOrders, setFoundOrders] = useState<any[]>([])
@@ -83,7 +87,31 @@ export default function MenuPublico() {
 
   const confirmarPedido = async () => {
     if (!nombre.trim()) return
+    
     setEnviando(true)
+    let comprobanteUrl = ''
+
+    // Si es transferencia, primero subimos la imagen
+    if (method === 'Transferencia' && comprobante) {
+      const fd = new FormData()
+      fd.append('file', comprobante)
+      fd.append('folder', 'comprobantes')
+      try {
+        const resUpload = await fetch('/api/upload', { method: 'POST', body: fd })
+        const dataUpload = await resUpload.json()
+        comprobanteUrl = dataUpload.url || ''
+      } catch (error) {
+        alert("Error al subir el comprobante. Por favor intenta de nuevo.")
+        setEnviando(false)
+        return
+      }
+    }
+
+    // Adjuntamos la URL del comprobante a las notas para que el Admin lo vea
+    const notasFinales = method === 'Transferencia' && comprobanteUrl
+      ? `${notas}\n\n🧾 [COMPROBANTE ADJUNTO]: ${comprobanteUrl}`
+      : notas
+
     const res = await fetch('/api/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -95,16 +123,20 @@ export default function MenuPublico() {
         channel,
         method,
         items:         cart,
-        notes:         notas || null,
+        notes:         notasFinales || null,
       }),
     })
     const data = await res.json()
+    
     setEnviando(false)
     if (res.ok) {
       setOrdenId(data.id?.slice(0, 8).toUpperCase() ?? 'OK')
       setCart([])
+      setComprobante(null)
       setStep('success')
       setCartOpen(false)
+    } else {
+      alert("Error al procesar el pedido.")
     }
   }
 
@@ -120,8 +152,15 @@ export default function MenuPublico() {
         <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
         <h2 className="font-black text-2xl text-gray-800 mb-2">¡Pedido Recibido!</h2>
         <p className="text-gray-500 mb-2">Tu pedido <strong>#{ordenId}</strong> está siendo procesado.</p>
-        <p className="text-sm text-gray-400 mb-6">Te avisaremos cuando esté listo.</p>
-        <button onClick={() => { setStep('menu'); setNombre(''); setTelefono(''); setDireccion(''); setNotas('') }}
+        
+        {method === 'Tarjeta' && (
+          <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl mt-4 mb-2">
+            <p className="text-xs text-blue-700 font-bold">Te contactaremos por WhatsApp enviándote el link de pago seguro para comenzar a prepararlo.</p>
+          </div>
+        )}
+
+        <p className="text-sm text-gray-400 mb-6 mt-4">Te avisaremos cuando esté listo.</p>
+        <button onClick={() => { setStep('menu'); setNombre(''); setTelefono(''); setDireccion(''); setNotas(''); setMethod('Efectivo'); setComprobante(null); }}
           className="w-full py-3 rounded-xl text-white font-bold text-lg" style={{ backgroundColor: color }}>
           Hacer otro pedido
         </button>
@@ -333,38 +372,78 @@ export default function MenuPublico() {
                   ))}
 
                   <div className="mt-4 space-y-3">
-                    <input placeholder="Nombre *" className="w-full border p-2 rounded-lg text-sm" value={nombre} onChange={e => setNombre(e.target.value)} />
-                    <input placeholder="Teléfono" className="w-full border p-2 rounded-lg text-sm" value={telefono} onChange={e => setTelefono(e.target.value)} type="tel" />
+                    <input placeholder="Nombre Completo *" className="w-full border p-2 rounded-lg text-sm bg-gray-50 focus:bg-white" value={nombre} onChange={e => setNombre(e.target.value)} />
+                    <input placeholder="Teléfono para contactarte *" className="w-full border p-2 rounded-lg text-sm bg-gray-50 focus:bg-white" value={telefono} onChange={e => setTelefono(e.target.value)} type="tel" />
                     
-                    <select value={channel} onChange={e => setChannel(e.target.value)} className="w-full border p-2 rounded-lg text-sm">
-                      <option>Local</option>
-                      <option>Retiro</option>
-                      <option>Pedido Directo</option>
-                      <option>WhatsApp</option>
-                    </select>
+                    <div className="grid grid-cols-2 gap-3">
+                      <select value={channel} onChange={e => setChannel(e.target.value)} className="w-full border p-2 rounded-lg text-sm font-bold text-gray-700">
+                        <option>Local (Comer aquí)</option>
+                        <option>Retiro (Llevar)</option>
+                        <option>Pedido Directo (Delivery)</option>
+                      </select>
 
-                    {channel === 'Pedido Directo' && (
-                      <input placeholder="Dirección de entrega" className="w-full border p-2 rounded-lg text-sm" value={direccion} onChange={e => setDireccion(e.target.value)} />
+                      <select value={method} onChange={e => { setMethod(e.target.value); setComprobante(null); }} className="w-full border p-2 rounded-lg text-sm font-bold text-gray-700">
+                        <option value="Efectivo">💵 Efectivo</option>
+                        <option value="Transferencia">🏦 Transferencia</option>
+                        <option value="Tarjeta">💳 Tarjeta / Link</option>
+                      </select>
+                    </div>
+
+                    {channel === 'Pedido Directo (Delivery)' && (
+                      <input placeholder="Dirección de entrega detallada" className="w-full border p-2 rounded-lg text-sm bg-blue-50 border-blue-200 placeholder-blue-400" value={direccion} onChange={e => setDireccion(e.target.value)} />
                     )}
 
-                    <select value={method} onChange={e => setMethod(e.target.value)} className="w-full border p-2 rounded-lg text-sm">
-                      <option>Efectivo</option>
-                      <option>Transferencia</option>
-                      <option>Tarjeta</option>
-                    </select>
+                    {/* LÓGICA DE MÉTODOS DE PAGO */}
+                    {method === 'Efectivo' && (
+                      <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                        Por favor ten el efectivo listo al momento de la entrega o retiro de tu pedido.
+                      </p>
+                    )}
 
-                    <input placeholder="Notas especiales..." className="w-full border p-2 rounded-lg text-sm" value={notas} onChange={e => setNotas(e.target.value)} />
+                    {method === 'Tarjeta' && (
+                      <p className="text-xs text-blue-700 bg-blue-50 p-2 rounded-lg border border-blue-100">
+                        Generaremos tu orden y te enviaremos un Link de Pago seguro por WhatsApp. Tu pedido comenzará a prepararse apenas se confirme la transacción.
+                      </p>
+                    )}
+
+                    {method === 'Transferencia' && (
+                      <div className="bg-purple-50 p-3 rounded-xl border border-purple-100 space-y-3">
+                        <p className="text-xs font-black text-purple-800 uppercase">Datos para transferencia:</p>
+                        <div className="text-xs text-purple-900 font-mono bg-white p-3 rounded-lg border border-purple-200 shadow-sm">
+                          Banco Pichincha<br/>
+                          Cuenta de Ahorros: <strong>2200000000</strong><br/>
+                          CI/RUC: <strong>0999999999</strong><br/>
+                          Nombre: Glotones 593
+                        </div>
+                        
+                        <label className="flex items-center justify-center gap-2 w-full p-3 bg-white border-2 border-dashed border-purple-300 rounded-xl cursor-pointer hover:bg-purple-100 hover:border-purple-500 transition text-sm text-purple-700 font-bold">
+                          <UploadCloud className="w-5 h-5" />
+                          {comprobante ? 'Comprobante Listo' : 'Subir Comprobante (Obligatorio)'}
+                          <input type="file" accept="image/*" className="hidden" onChange={e => setComprobante(e.target.files?.[0] || null)} />
+                        </label>
+                        {comprobante && <p className="text-[10px] text-green-600 font-bold text-center bg-green-50 rounded p-1 truncate">✓ {comprobante.name}</p>}
+                      </div>
+                    )}
+
+                    <textarea placeholder="Notas especiales (sin cebolla, extra salsa...)" rows={2} className="w-full border p-2 rounded-lg text-sm bg-gray-50 focus:bg-white resize-none" value={notas} onChange={e => setNotas(e.target.value)} />
                   </div>
 
-                  <div className="border-t mt-4 pt-4 flex justify-between font-bold text-lg">
-                    <span>Total</span>
+                  <div className="border-t mt-4 pt-4 flex justify-between items-center font-black text-xl">
+                    <span>TOTAL</span>
                     <span style={{ color }}>${cartTotal.toFixed(2)}</span>
                   </div>
 
-                  <button onClick={confirmarPedido} disabled={enviando || !nombre.trim()}
-                    className="w-full mt-4 py-3 rounded-xl text-white font-bold text-lg disabled:opacity-60" style={{ backgroundColor: color }}>
-                    {enviando ? 'Enviando...' : `PEDIR AHORA $${cartTotal.toFixed(2)}`}
+                  <button 
+                    onClick={confirmarPedido} 
+                    disabled={enviando || !nombre.trim() || !telefono.trim() || (method === 'Transferencia' && !comprobante)}
+                    className="w-full mt-4 py-4 rounded-2xl text-white font-black text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-transform active:scale-95" 
+                    style={{ backgroundColor: color }}
+                  >
+                    {enviando ? 'PROCESANDO...' : 'CONFIRMAR PEDIDO'}
                   </button>
+                  {(!nombre.trim() || !telefono.trim()) && (
+                    <p className="text-center text-[10px] text-red-400 mt-2 font-bold uppercase">Nombre y Teléfono son obligatorios</p>
+                  )}
                 </>
               )}
             </div>
@@ -390,7 +469,7 @@ export default function MenuPublico() {
               </button>
 
               {foundOrders.length > 0 && (
-                <div className="space-y-2 max-h-48 overflow-y-auto">
+                <div className="space-y-2 max-h-48 overflow-y-auto mt-4">
                   {foundOrders.map(o => (
                     <div key={o.id} className="border rounded-xl p-3 text-sm">
                       <div className="flex justify-between">
@@ -404,10 +483,10 @@ export default function MenuPublico() {
               )}
 
               {foundOrders.length === 0 && phoneSearch && !searching && (
-                <p className="text-center text-gray-400 text-sm">No se encontraron pedidos</p>
+                <p className="text-center text-gray-400 text-sm mt-4">No se encontraron pedidos</p>
               )}
 
-              <div className="border-t pt-4 text-center">
+              <div className="border-t pt-4 text-center mt-4">
                 <a href="/admin/login" className="text-sm font-bold hover:underline" style={{ color }}>
                   Acceso Staff →
                 </a>

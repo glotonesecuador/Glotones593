@@ -4,12 +4,13 @@ import { useState, useEffect } from 'react'
 import {
   Save, Store, Palette, Globe, Lock, CheckCircle,
   Plus, Trash2, Eye, EyeOff, X, Users, ImagePlus,
-  Zap, AlertCircle, ToggleLeft, ToggleRight,
+  Zap, AlertCircle, Gift, MapPin, Edit3
 } from 'lucide-react'
 import clsx from 'clsx'
 
 const TABS = [
   { id: 'tienda',        label: 'Tienda',        icon: Store   },
+  { id: 'sucursales',    label: 'Sucursales',    icon: MapPin  },
   { id: 'apariencia',    label: 'Apariencia',    icon: Palette },
   { id: 'canales',       label: 'Canales',       icon: Globe   },
   { id: 'usuarios',      label: 'Usuarios',      icon: Users   },
@@ -29,6 +30,7 @@ const CANALES_DEFAULT = [
 
 interface Canal    { id: string; name: string; fee: number; active: boolean; builtin: boolean }
 interface Usuario  { id: string; name: string; email: string; role: string; active: boolean }
+interface Sucursal { id: string; name: string; address: string; active: boolean }
 
 export default function ConfigView() {
   const [tab, setTab]             = useState('tienda')
@@ -44,6 +46,7 @@ export default function ConfigView() {
     bannerBtnText: 'Únete',
   })
 
+  const [ratioPuntos, setRatioPuntos] = useState(20)
   const [canales, setCanales]         = useState<Canal[]>(CANALES_DEFAULT)
   const [modalCanal, setModalCanal]   = useState(false)
   const [nuevoCanal, setNuevoCanal]   = useState({ name: '', fee: 0 })
@@ -66,17 +69,26 @@ export default function ConfigView() {
     ubereats_token: '', ubereats_store: '', ubereats_active: false,
   })
 
+  // ESTADOS PARA SUCURSALES
+  const [sucursales, setSucursales]   = useState<Sucursal[]>([])
+  const [modalSucursal, setModalSucursal] = useState({ open: false, isEdit: false })
+  const [nuevaSucursal, setNuevaSucursal] = useState<Sucursal>({ id: '', name: '', address: '', active: true })
+
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then(data => {
       if (data?.store)         setConfig(p => ({ ...p, ...data.store }))
       if (data?.canales)       setCanales(data.canales)
       if (data?.usuarios)      setUsuarios(data.usuarios)
       if (data?.integraciones) setIntegr(p => ({ ...p, ...data.integraciones }))
+      if (data?.ratio_puntos)  setRatioPuntos(Number(data.ratio_puntos))
+    })
+
+    fetch('/api/locations').then(r => r.json()).then(data => {
+      if (Array.isArray(data)) setSucursales(data)
     })
   }, [])
 
   const update = (k: string, v: any) => setConfig(p => ({ ...p, [k]: v }))
-
   const ok = (msg: string) => { setExito(msg); setTimeout(() => setExito(''), 3000) }
 
   const guardar = async (key: string, value: any) => {
@@ -88,6 +100,44 @@ export default function ConfigView() {
     })
     setGuardando(false)
     ok('¡Guardado correctamente!')
+  }
+
+  const guardarPuntos = async () => {
+    setGuardando(true)
+    await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'ratio_puntos', value: ratioPuntos }),
+    })
+    setGuardando(false)
+    ok('¡Reglas de lealtad actualizadas!')
+  }
+
+  const guardarSucursal = async () => {
+    if (!nuevaSucursal.id || !nuevaSucursal.name) return
+    setGuardando(true)
+    await fetch('/api/locations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(nuevaSucursal),
+    })
+    setModalSucursal({ open: false, isEdit: false })
+    setNuevaSucursal({ id: '', name: '', address: '', active: true })
+    
+    // Recargar lista
+    const res = await fetch('/api/locations')
+    const data = await res.json()
+    if (Array.isArray(data)) setSucursales(data)
+    
+    setGuardando(false)
+    ok('Sucursal guardada')
+  }
+
+  const eliminarSucursal = async (id: string) => {
+    if (!confirm('¿Eliminar sucursal?')) return
+    await fetch(`/api/locations?id=${id}`, { method: 'DELETE' })
+    setSucursales(prev => prev.filter(s => s.id !== id))
+    ok('Sucursal eliminada')
   }
 
   const subirLogo = async (file: File) => {
@@ -104,7 +154,9 @@ export default function ConfigView() {
   const agregarCanal = () => {
     if (!nuevoCanal.name.trim()) return
     const c: Canal = { id: nuevoCanal.name.toLowerCase().replace(/\s+/g, '_'), name: nuevoCanal.name, fee: nuevoCanal.fee, active: true, builtin: false }
-    setCanales(p => [...p, c])
+    const lista = [...canales, c]
+    setCanales(lista)
+    guardar('canales', lista)
     setNuevoCanal({ name: '', fee: 0 })
     setModalCanal(false)
   }
@@ -160,42 +212,121 @@ export default function ConfigView() {
 
       {/* TIENDA */}
       {tab === 'tienda' && (
-        <div className="card space-y-5">
-          <h2 className="font-bold text-gray-700">Información del negocio</h2>
-          <div>
-            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Logo</label>
-            <div className="flex items-center gap-4">
-              <div className="w-20 h-20 rounded-2xl bg-gray-100 border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden">
-                {config.logoUrl ? <img src={config.logoUrl} className="w-full h-full object-contain" /> : <Store className="w-8 h-8 text-gray-300" />}
+        <div className="space-y-5">
+          <div className="card space-y-5">
+            <h2 className="font-bold text-gray-700">Información del negocio</h2>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Logo</label>
+              <div className="flex items-center gap-4">
+                <div className="w-20 h-20 rounded-2xl bg-gray-100 border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden">
+                  {config.logoUrl ? <img src={config.logoUrl} className="w-full h-full object-contain" /> : <Store className="w-8 h-8 text-gray-300" />}
+                </div>
+                <label className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-gray-200 hover:border-purple-300 hover:bg-purple-50 cursor-pointer transition-all text-sm">
+                  <ImagePlus className="w-4 h-4 text-purple-500" />
+                  <span className="text-gray-600">{subiendo ? 'Subiendo...' : 'Subir logo'}</span>
+                  <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && subirLogo(e.target.files[0])} />
+                </label>
               </div>
-              <label className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-gray-200 hover:border-purple-300 hover:bg-purple-50 cursor-pointer transition-all text-sm">
-                <ImagePlus className="w-4 h-4 text-purple-500" />
-                <span className="text-gray-600">{subiendo ? 'Subiendo...' : 'Subir logo'}</span>
-                <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && subirLogo(e.target.files[0])} />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Nombre del negocio</label>
+              <input value={config.name} onChange={e => update('name', e.target.value)} className="input-field" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Teléfono</label>
+                <input value={config.phone} onChange={e => update('phone', e.target.value)} placeholder="0999999999" className="input-field" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Instagram</label>
+                <input value={config.instagram} onChange={e => update('instagram', e.target.value)} placeholder="@glotones593" className="input-field" />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Dirección</label>
+              <input value={config.address} onChange={e => update('address', e.target.value)} className="input-field" />
+            </div>
+            <button onClick={() => guardar('store', config)} disabled={guardando} className="btn-brand flex items-center gap-2">
+              <Save className="w-4 h-4" /> {guardando ? 'Guardando...' : 'Guardar datos de tienda'}
+            </button>
+          </div>
+
+          <div className="card space-y-4 border-2 border-purple-100 bg-purple-50/30">
+            <div className="flex items-center gap-2 mb-2">
+              <Gift className="w-5 h-5 text-purple-600" />
+              <h2 className="font-bold text-gray-800">Programa de Lealtad (Cashback)</h2>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">
+                Meta para ganar 1 Punto ($1 de descuento)
               </label>
+              <div className="flex items-center gap-3 mt-2">
+                <span className="text-gray-400 font-medium">$</span>
+                <input 
+                  type="number" 
+                  value={ratioPuntos} 
+                  onChange={(e) => setRatioPuntos(Number(e.target.value))}
+                  className="input-field max-w-[120px]"
+                />
+                <span className="text-gray-500 font-medium text-sm">de compra = 1 Punto</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-3 italic">
+                * Los puntos se calculan automáticamente sumando todas las compras del año en curso. 
+                Las compras por plataformas de delivery no suman puntos.
+              </p>
             </div>
+            <button onClick={guardarPuntos} disabled={guardando} className="btn-brand flex items-center gap-2 bg-purple-700 hover:bg-purple-800">
+              <Save className="w-4 h-4" /> Guardar reglas de lealtad
+            </button>
           </div>
-          <div>
-            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Nombre del negocio</label>
-            <input value={config.name} onChange={e => update('name', e.target.value)} className="input-field" />
+        </div>
+      )}
+
+      {/* SUCURSALES */}
+      {tab === 'sucursales' && (
+        <div className="space-y-4 animate-in fade-in">
+          <div className="flex justify-between items-center">
+            <h2 className="font-bold text-gray-700 uppercase text-sm">Sucursales del negocio</h2>
+            <button onClick={() => setModalSucursal({ open: true, isEdit: false })} className="btn-brand text-xs px-4 py-2 flex items-center gap-1.5">
+              <Plus className="w-4 h-4" /> Nueva Sucursal
+            </button>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Teléfono</label>
-              <input value={config.phone} onChange={e => update('phone', e.target.value)} placeholder="0999999999" className="input-field" />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Instagram</label>
-              <input value={config.instagram} onChange={e => update('instagram', e.target.value)} placeholder="@glotones593" className="input-field" />
-            </div>
+          <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-gray-50 text-gray-400 font-black text-[10px] uppercase">
+                <tr>
+                  <th className="px-6 py-4">ID / Slug</th>
+                  <th className="px-6 py-4">Nombre Comercial</th>
+                  <th className="px-6 py-4 text-center">Estado</th>
+                  <th className="px-6 py-4 text-right">Acción</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 uppercase text-[11px] font-bold">
+                {sucursales.map((s) => (
+                  <tr key={s.id} className="hover:bg-gray-50 transition-colors text-gray-700">
+                    <td className="px-6 py-4 text-purple-600 font-black">{s.id}</td>
+                    <td className="px-6 py-4">
+                      <p className="text-gray-900">{s.name}</p>
+                      <p className="text-[9px] text-gray-400 normal-case italic font-medium">{s.address}</p>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={clsx("px-2 py-1 rounded-lg", s.active ? "bg-green-50 text-green-600" : "bg-red-50 text-red-500")}>
+                        {s.active ? 'ACTIVA' : 'INACTIVA'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right flex justify-end gap-2">
+                      <button onClick={() => { setNuevaSucursal(s); setModalSucursal({ open: true, isEdit: true }) }} className="p-2 hover:bg-gray-100 rounded-lg text-gray-400">
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => eliminarSucursal(s.id)} className="p-2 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-500">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div>
-            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Dirección</label>
-            <input value={config.address} onChange={e => update('address', e.target.value)} className="input-field" />
-          </div>
-          <button onClick={() => guardar('store', config)} disabled={guardando} className="btn-brand flex items-center gap-2">
-            <Save className="w-4 h-4" /> {guardando ? 'Guardando...' : 'Guardar cambios'}
-          </button>
         </div>
       )}
 
@@ -273,25 +404,6 @@ export default function ConfigView() {
           <button onClick={() => guardar('canales', canales)} disabled={guardando} className="btn-brand flex items-center gap-2">
             <Save className="w-4 h-4" /> Guardar canales
           </button>
-
-          {modalCanal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-                <div className="flex items-center justify-between mb-5">
-                  <h3 className="font-bold text-gray-800">Nuevo canal</h3>
-                  <button onClick={() => setModalCanal(false)}><X className="w-5 h-5 text-gray-400" /></button>
-                </div>
-                <div className="space-y-4">
-                  <input value={nuevoCanal.name} onChange={e => setNuevoCanal(p => ({ ...p, name: e.target.value }))} placeholder="Ej: Glovo" className="input-field" />
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Comisión %</label>
-                    <input type="number" value={nuevoCanal.fee} min="0" max="50" onChange={e => setNuevoCanal(p => ({ ...p, fee: Number(e.target.value) }))} className="input-field" />
-                  </div>
-                  <button onClick={agregarCanal} className="w-full btn-brand py-3">Agregar canal</button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -321,32 +433,6 @@ export default function ConfigView() {
               </div>
             ))}
           </div>
-
-          {modalUser && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-                <div className="flex items-center justify-between mb-5">
-                  <h3 className="font-bold text-gray-800">Nuevo usuario</h3>
-                  <button onClick={() => setModalUser(false)}><X className="w-5 h-5 text-gray-400" /></button>
-                </div>
-                <div className="space-y-4">
-                  <input value={nuevoUser.name} onChange={e => setNuevoUser(p => ({ ...p, name: e.target.value }))} placeholder="Nombre completo" className="input-field" />
-                  <input type="email" value={nuevoUser.email} onChange={e => setNuevoUser(p => ({ ...p, email: e.target.value }))} placeholder="email@ejemplo.com" className="input-field" />
-                  <div className="relative">
-                    <input type={showPwd ? 'text' : 'password'} value={nuevoUser.password} onChange={e => setNuevoUser(p => ({ ...p, password: e.target.value }))} placeholder="Contraseña inicial" className="input-field pr-10" />
-                    <button type="button" onClick={() => setShowPwd(!showPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                      {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  <select value={nuevoUser.role} onChange={e => setNuevoUser(p => ({ ...p, role: e.target.value }))} className="input-field">
-                    {['admin', 'cajero', 'cocina', 'solo_lectura'].map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                  <p className="text-xs text-gray-400">admin: todo · cajero: ventas y pedidos · cocina: solo KDS · solo_lectura: ver reportes</p>
-                  <button onClick={agregarUsuario} className="w-full btn-brand py-3">Crear usuario</button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -357,7 +443,6 @@ export default function ConfigView() {
             <AlertCircle className="w-5 h-5 shrink-0" />
             <p>Configura los tokens API de cada plataforma. Contáctalas directamente para obtener acceso como partner.</p>
           </div>
-
           {[
             { key: 'rappi', label: 'Rappi', color: 'bg-orange-500', activeKey: 'rappi_active' as const, tokenKey: 'rappi_token' as const, storeKey: 'rappi_store_id' as const, placeholder: 'Bearer token...' },
             { key: 'pedidosya', label: 'PedidosYa', color: 'bg-red-500', activeKey: 'pedidosya_active' as const, tokenKey: 'pedidosya_token' as const, storeKey: 'pedidosya_store' as const, placeholder: 'Bearer token...' },
@@ -375,21 +460,16 @@ export default function ConfigView() {
                 <div className="grid grid-cols-2 gap-3 pt-2 border-t">
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">API Token</label>
-                    <input type="password" value={integr[plat.tokenKey]}
-                      onChange={e => setIntegr(p => ({ ...p, [plat.tokenKey]: e.target.value }))}
-                      placeholder={plat.placeholder} className="input-field text-xs" />
+                    <input type="password" value={integr[plat.tokenKey]} onChange={e => setIntegr(p => ({ ...p, [plat.tokenKey]: e.target.value }))} placeholder={plat.placeholder} className="input-field text-xs" />
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Store ID</label>
-                    <input value={integr[plat.storeKey]}
-                      onChange={e => setIntegr(p => ({ ...p, [plat.storeKey]: e.target.value }))}
-                      placeholder="123456" className="input-field text-xs" />
+                    <input value={integr[plat.storeKey]} onChange={e => setIntegr(p => ({ ...p, [plat.storeKey]: e.target.value }))} placeholder="123456" className="input-field text-xs" />
                   </div>
                 </div>
               )}
             </div>
           ))}
-
           <button onClick={() => guardar('integraciones', integr)} disabled={guardando} className="btn-brand flex items-center gap-2">
             <Save className="w-4 h-4" /> Guardar integraciones
           </button>
@@ -403,7 +483,7 @@ export default function ConfigView() {
             <h2 className="font-bold text-gray-700">Cambiar contraseña admin</h2>
             <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-xs text-yellow-700 flex gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>Después de cambiar la clave aquí, actualiza también <code className="bg-yellow-100 px-1 rounded">ADMIN_PASSWORD</code> en tu <code className="bg-yellow-100 px-1 rounded">.env.local</code> y reinicia el servidor.</span>
+              <span>Después de cambiar la clave aquí, actualiza también ADMIN_PASSWORD en tu .env.local.</span>
             </div>
             {errPwd && <div className="bg-red-50 text-red-600 text-sm px-4 py-3 rounded-xl border border-red-100">{errPwd}</div>}
             <div>
@@ -423,17 +503,68 @@ export default function ConfigView() {
               <Lock className="w-4 h-4" /> Cambiar contraseña
             </button>
           </div>
+        </div>
+      )}
 
-          <div className="card space-y-3">
-            <h2 className="font-bold text-gray-700">Sesión activa</h2>
-            <div className="flex justify-between items-center py-2 border-b">
-              <p className="text-sm text-gray-700">Duración de sesión</p>
-              <span className="badge bg-purple-100 text-purple-700">8 horas</span>
+      {/* MODALES EXTRAS */}
+      {modalCanal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold text-gray-800 uppercase text-sm">Nuevo canal</h3>
+              <button onClick={() => setModalCanal(false)}><X className="w-5 h-5 text-gray-400" /></button>
             </div>
-            <div className="flex justify-between items-center py-2">
-              <p className="text-sm text-gray-700">Email admin</p>
-              <span className="badge bg-gray-100 text-gray-600 text-xs">Configurado en .env.local</span>
+            <div className="space-y-4">
+              <input value={nuevoCanal.name} onChange={e => setNuevoCanal(p => ({ ...p, name: e.target.value }))} placeholder="Ej: Glovo" className="input-field" />
+              <input type="number" value={nuevoCanal.fee} min="0" max="50" onChange={e => setNuevoCanal(p => ({ ...p, fee: Number(e.target.value) }))} className="input-field" placeholder="Comisión %" />
+              <button onClick={agregarCanal} className="w-full btn-brand py-3">Agregar canal</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {modalUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold text-gray-800 uppercase text-sm">Nuevo usuario</h3>
+              <button onClick={() => setModalUser(false)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            <div className="space-y-4">
+              <input value={nuevoUser.name} onChange={e => setNuevoUser(p => ({ ...p, name: e.target.value }))} placeholder="Nombre completo" className="input-field" />
+              <input type="email" value={nuevoUser.email} onChange={e => setNuevoUser(p => ({ ...p, email: e.target.value }))} placeholder="email@ejemplo.com" className="input-field" />
+              <div className="relative">
+                <input type={showPwd ? 'text' : 'password'} value={nuevoUser.password} onChange={e => setNuevoUser(p => ({ ...p, password: e.target.value }))} placeholder="Contraseña inicial" className="input-field pr-10" />
+                <button type="button" onClick={() => setShowPwd(!showPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                  {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              <select value={nuevoUser.role} onChange={e => setNuevoUser(p => ({ ...p, role: e.target.value }))} className="input-field uppercase text-xs font-bold">
+                {['admin', 'cajero', 'cocina', 'solo_lectura'].map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+              <button onClick={agregarUsuario} className="w-full btn-brand py-3 font-bold uppercase text-xs">Crear usuario</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalSucursal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 space-y-6 animate-in zoom-in-95">
+             <div className="flex justify-between items-center border-b pb-4">
+               <h3 className="font-black text-gray-800 uppercase tracking-tight">{modalSucursal.isEdit ? 'Editar Sucursal' : 'Nueva Sucursal'}</h3>
+               <button onClick={() => setModalSucursal({ open: false, isEdit: false })}><X className="text-gray-400" /></button>
+             </div>
+             <div className="space-y-4">
+               <div><label className="text-[10px] font-black text-gray-400 uppercase block mb-1">ID Único (slug)</label><input value={nuevaSucursal.id} disabled={modalSucursal.isEdit} onChange={e => setNuevaSucursal({...nuevaSucursal, id: e.target.value})} className="input-field" placeholder="sur-1" /></div>
+               <div><label className="text-[10px] font-black text-gray-400 uppercase block mb-1">Nombre Comercial</label><input value={nuevaSucursal.name} onChange={e => setNuevaSucursal({...nuevaSucursal, name: e.target.value})} className="input-field" placeholder="Glotones Sur" /></div>
+               <div><label className="text-[10px] font-black text-gray-400 uppercase block mb-1">Dirección</label><input value={nuevaSucursal.address} onChange={e => setNuevaSucursal({...nuevaSucursal, address: e.target.value})} className="input-field" placeholder="Av. Principal..." /></div>
+               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl">
+                 <span className="text-[10px] font-black text-gray-500 uppercase">Activa</span>
+                 <Toggle value={nuevaSucursal.active} onChange={() => setNuevaSucursal({...nuevaSucursal, active: !nuevaSucursal.active})} />
+               </div>
+               <button onClick={guardarSucursal} className="w-full btn-brand py-4 rounded-2xl uppercase text-xs font-black shadow-lg">Confirmar</button>
+             </div>
           </div>
         </div>
       )}

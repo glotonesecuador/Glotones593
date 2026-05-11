@@ -30,6 +30,8 @@ export interface Order {
   customer_name: string
   phone: string | null
   address: string | null
+  cedula: string | null
+  email: string | null
   total: number
   net_total: number | null
   status: OrderStatus

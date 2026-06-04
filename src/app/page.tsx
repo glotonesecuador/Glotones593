@@ -590,6 +590,7 @@ export default function MenuPublico() {
               <ShoppingBag className="w-4 h-4 text-yellow-300" />
             </button>
           </div>
+        </div>{/* cierre Barra 2 */}
 
         {/* Barra 3: Categorías */}
         <div

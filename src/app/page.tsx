@@ -48,6 +48,8 @@ export default function MenuPublico() {
   const [method, setMethod] = useState('Efectivo')
   const [enviando, setEnviando] = useState(false)
   const [ordenId, setOrdenId] = useState('')
+  // Snapshot del pedido para el mensaje de WhatsApp (se captura antes de limpiar el carrito)
+  const [resumenPedido, setResumenPedido] = useState<{items: any[], total: number, sucursalId: string}>({ items: [], total: 0, sucursalId: '' })
 
   // Nuevo estado para el comprobante de transferencia
   const [comprobante, setComprobante] = useState<File | null>(null)
@@ -299,6 +301,8 @@ export default function MenuPublico() {
     setEnviando(false)
     if (res.ok) {
       setOrdenId(data.id?.slice(0, 8).toUpperCase() ?? 'OK')
+      // Guardar snapshot ANTES de limpiar el carrito
+      setResumenPedido({ items: [...cart], total: cartTotal, sucursalId: sucursalActual })
       setCart([])
       setComprobante(null)
       setStep('success')
@@ -396,17 +400,32 @@ export default function MenuPublico() {
   }
 
   if (step === 'success') {
-    // Generamos el texto automático para WhatsApp
+    // Usar el snapshot guardado antes de limpiar el carrito
+    const itemsResumen = resumenPedido.items
+    const totalResumen = resumenPedido.total
+    // Buscar la sucursal por el ID guardado en el snapshot
+    const allSucursales = sucursales.length > 0 ? sucursales : [
+      { id: 'norte-1', name: 'Glotones Norte', address: '', phone: '0939013199', active: true },
+      { id: 'sur-1',   name: 'Glotones Sur',   address: '', phone: '0983809283', active: true },
+    ]
+    const sucursalElegida = allSucursales.find(s => s.id === resumenPedido.sucursalId)
+    const numeroWa = sucursalElegida?.phone || config.phone || '0939013199'
+
+    // Armar línea de items: "2x La Pelada - $9.00"
+    const lineasItems = itemsResumen
+      .map((i: any) => `  • ${i.quantity}x ${i.name} — $${(i.price * i.quantity).toFixed(2)}`)
+      .join('\n')
+
     const mensajeWa = encodeURIComponent(
       `🍔 ¡Hola Glotones!\nAcabo de realizar el pedido *#${ordenId}* por la web.\n\n` +
       `👤 *Cliente:* ${nombre}\n` +
+      `📍 *Local:* ${sucursalElegida?.name || ''}\n` +
+      `🛍️ *Canal:* ${channel}\n\n` +
+      `*Detalle del pedido:*\n${lineasItems}\n\n` +
       `💳 *Método de pago:* ${method}\n` +
-      `💰 *Total a pagar:* $${cartTotal.toFixed(2)}\n\n` +
+      `💰 *Total a pagar:* $${totalResumen.toFixed(2)}\n\n` +
       (method === 'Tarjeta' ? `👉 *Por favor envíenme el link de pagos para procesar la tarjeta.*` : `¡Quedo atento a la confirmación!`)
-    );
-    // Usar el teléfono de la sucursal elegida, con fallback al global
-    const sucursalElegida = sucursalesFallback.find(s => s.id === sucursalActual);
-    const numeroWa = sucursalElegida?.phone || config.phone || '0939013199';
+    )
     const linkWa = `https://wa.me/593${numeroWa}?text=${mensajeWa}`;
 
     return (

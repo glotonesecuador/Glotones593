@@ -420,7 +420,9 @@ export default function MenuPublico() {
       `🍔 ¡Hola Glotones!\nAcabo de realizar el pedido *#${ordenId}* por la web.\n\n` +
       `👤 *Cliente:* ${nombre}\n` +
       `📍 *Local:* ${sucursalElegida?.name || ''}\n` +
-      `🛍️ *Canal:* ${channel}\n\n` +
+      `🛍️ *Canal:* ${channel}\n` +
+      (channel === 'Pedido Directo (Delivery)' && direccion ? `🏠 *Dirección:* ${direccion}\n` : '') +
+      `\n` +
       `*Detalle del pedido:*\n${lineasItems}\n\n` +
       `💳 *Método de pago:* ${method}\n` +
       `💰 *Total a pagar:* $${totalResumen.toFixed(2)}\n\n` +

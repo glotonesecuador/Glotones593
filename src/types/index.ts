@@ -9,6 +9,7 @@ export interface Product {
   discount_pct: number
   sort_order: number
   created_at: string
+  extras_config?: GrupoExtra[]
 }
 
 export interface Category {
@@ -17,12 +18,26 @@ export interface Category {
   sort_order: number
 }
 
+// Un item dentro de una orden.
+// - id       → lineId único de esta línea (UUID generado al agregar al carrito)
+// - base_id  → ID del Product original (para lookup en catálogo / KDS)
 export interface OrderItem {
   id: string
+  base_id: string
   name: string
   price: number
   quantity: number
   image_url?: string | null
+}
+
+// Grupo de modificadores/extras asignado a un producto
+export interface GrupoExtra {
+  id: string
+  nombre: string
+  tipo: 'obligatorio' | 'opcional'
+  min: number
+  max: number
+  opciones: string[]  // IDs de productos con category === 'Extras'
 }
 
 export interface Order {

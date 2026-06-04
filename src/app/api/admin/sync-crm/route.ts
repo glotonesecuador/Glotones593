@@ -1,60 +1,49 @@
-import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
-
-// Conexión directa y autónoma
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
-export const dynamic = 'force-dynamic'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { supabaseAdmin } from '@/lib/supabase'
 
 export async function POST() {
-  try {
-    const { data: orders, error: fetchError } = await supabase
-      .from('orders')
-      .select('phone, customer_name, email, total, created_at, status')
-      .not('phone', 'is', null)
-      .neq('phone', '');
+  const session = await getServerSession(authOptions)
+  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-    if (fetchError) throw fetchError;
-    if (!orders || orders.length === 0) return NextResponse.json({ message: 'Sin pedidos' });
+  const db = supabaseAdmin()
 
-    const customerMap: Record<string, any> = {};
+  // Traer todas las órdenes no canceladas
+  const { data: orders } = await db
+    .from('orders')
+    .select('phone, customer_name, total, created_at')
+    .neq('status', 'Cancelado')
+    .not('phone', 'is', null)
 
-    orders.forEach((o: any) => {
-      const tel = o.phone.toString().trim();
+  if (!orders) return NextResponse.json({ ok: true, synced: 0 })
 
-      if (!customerMap[tel]) {
-        customerMap[tel] = {
-          phone: tel, name: o.customer_name || 'Cliente Glotón', email: o.email || null,
-          total_spent: 0, order_count: 0, last_order: o.created_at, points: 0
-        };
-      }
+  // Agrupar por teléfono
+  const map: Record<string, { name: string; phone: string; total: number; count: number; last: string }> = {}
 
-      if (o.status !== 'Cancelado' && o.status !== 'Error') {
-        customerMap[tel].total_spent += parseFloat(o.total) || 0;
-        customerMap[tel].order_count += 1;
-        customerMap[tel].points = Math.floor(customerMap[tel].total_spent);
-
-        if (new Date(o.created_at) > new Date(customerMap[tel].last_order)) {
-          customerMap[tel].last_order = o.created_at;
-        }
-        if (o.customer_name && customerMap[tel].name === 'Cliente Glotón') {
-          customerMap[tel].name = o.customer_name;
-        }
-      }
-    });
-
-    const finalData = Object.values(customerMap);
-    const { error: upsertError } = await supabase
-      .from('customers')
-      .upsert(finalData, { onConflict: 'phone' });
-
-    if (upsertError) throw upsertError;
-
-    return NextResponse.json({ success: true, actualizados: finalData.length });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  for (const o of orders) {
+    if (!o.phone) continue
+    if (!map[o.phone]) {
+      map[o.phone] = { phone: o.phone, name: o.customer_name, total: 0, count: 0, last: o.created_at }
+    }
+    map[o.phone].total += Number(o.total)
+    map[o.phone].count += 1
+    if (new Date(o.created_at) > new Date(map[o.phone].last)) {
+      map[o.phone].last = o.created_at
+    }
   }
+
+  // Upsert cada cliente en la tabla customers
+  let synced = 0
+  for (const c of Object.values(map)) {
+    const { error } = await db.from('customers').upsert({
+      phone:      c.phone,
+      name:       c.name !== 'Consumidor Final' ? c.name : undefined,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'phone', ignoreDuplicates: false })
+
+    if (!error) synced++
+  }
+
+  return NextResponse.json({ ok: true, synced })
 }

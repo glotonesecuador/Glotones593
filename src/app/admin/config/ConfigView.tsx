@@ -4,12 +4,14 @@ import { useState, useEffect } from 'react'
 import {
   Save, Store, Palette, Globe, Lock, CheckCircle,
   Plus, Trash2, Eye, EyeOff, X, Users, ImagePlus,
-  Zap, AlertCircle, Gift, MapPin, Edit3
+  Zap, AlertCircle, Gift, MapPin, Edit3, 
+  CreditCard, Building, Truck // <-- Añadí los íconos nuevos aquí
 } from 'lucide-react'
 import clsx from 'clsx'
 
 const TABS = [
   { id: 'tienda',        label: 'Tienda',        icon: Store   },
+  { id: 'caja',          label: 'Caja y Pagos',  icon: CreditCard }, // <-- NUEVA PESTAÑA
   { id: 'sucursales',    label: 'Sucursales',    icon: MapPin  },
   { id: 'apariencia',    label: 'Apariencia',    icon: Palette },
   { id: 'canales',       label: 'Canales',       icon: Globe   },
@@ -38,12 +40,16 @@ export default function ConfigView() {
   const [exito, setExito]         = useState('')
   const [subiendo, setSubiendo]   = useState(false)
 
+  // --- AÑADÍ LOS CAMPOS NUEVOS AL CONFIG INICIAL ---
   const [config, setConfig] = useState({
     name: 'Glotones 593', phone: '', instagram: '', address: '',
     primaryColor: '#c026d3', logoUrl: '', showBanner: true,
     bannerTitle: 'ACUMULA SMASH POINTS',
     bannerText: 'Regístrate y gana puntos con cada compra',
     bannerBtnText: 'Únete',
+    bank_name: '', bank_account_type: '', bank_account: '', bank_ruc: '', bank_owner: '',
+    enable_cash: true, enable_transfer: true, enable_card: true,
+    enable_local: true, enable_pickup: true, enable_delivery: true,
   })
 
   const [ratioPuntos, setRatioPuntos] = useState(20)
@@ -96,7 +102,7 @@ export default function ConfigView() {
     await fetch('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key, value }),
+      body: JSON.stringify({ [key]: value }), // Modificado para que haga match perfecto con tu route.ts
     })
     setGuardando(false)
     ok('¡Guardado correctamente!')
@@ -107,7 +113,7 @@ export default function ConfigView() {
     await fetch('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: 'ratio_puntos', value: ratioPuntos }),
+      body: JSON.stringify({ ratio_puntos: ratioPuntos }),
     })
     setGuardando(false)
     ok('¡Reglas de lealtad actualizadas!')
@@ -212,7 +218,7 @@ export default function ConfigView() {
 
       {/* TIENDA */}
       {tab === 'tienda' && (
-        <div className="space-y-5">
+        <div className="space-y-5 animate-in fade-in">
           <div className="card space-y-5">
             <h2 className="font-bold text-gray-700">Información del negocio</h2>
             <div>
@@ -282,6 +288,90 @@ export default function ConfigView() {
         </div>
       )}
 
+      {/* ── NUEVA PESTAÑA: CAJA Y PAGOS ─────────────────────────────────── */}
+      {tab === 'caja' && (
+        <div className="space-y-5 animate-in fade-in">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* DATOS BANCARIOS */}
+            <div className="card space-y-4">
+              <div className="flex items-center gap-2 border-b pb-3">
+                <Building className="w-5 h-5 text-purple-600" />
+                <h2 className="font-bold text-gray-700">Datos para Transferencias</h2>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Banco</label>
+                <input value={config.bank_name ?? ''} onChange={e => update('bank_name', e.target.value)} placeholder="Ej: Banco Pichincha" className="input-field" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Tipo de Cuenta</label>
+                  <input value={config.bank_account_type ?? ''} onChange={e => update('bank_account_type', e.target.value)} placeholder="Ej: Ahorros" className="input-field" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Nº de Cuenta</label>
+                  <input value={config.bank_account ?? ''} onChange={e => update('bank_account', e.target.value)} placeholder="Ej: 2200000000" className="input-field" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">CI / RUC</label>
+                  <input value={config.bank_ruc ?? ''} onChange={e => update('bank_ruc', e.target.value)} placeholder="Ej: 0999999999001" className="input-field" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Titular</label>
+                  <input value={config.bank_owner ?? ''} onChange={e => update('bank_owner', e.target.value)} placeholder="Ej: Glotones 593" className="input-field" />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-5">
+              {/* MÉTODOS DE PAGO */}
+              <div className="card space-y-4">
+                <div className="flex items-center gap-2 border-b pb-3">
+                  <CreditCard className="w-5 h-5 text-purple-600" />
+                  <h2 className="font-bold text-gray-700">Métodos de Pago Activos</h2>
+                </div>
+                <div className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg transition-colors">
+                  <span className="font-semibold text-sm text-gray-700">Efectivo al recibir</span>
+                  <Toggle value={config.enable_cash !== false} onChange={() => update('enable_cash', config.enable_cash === false ? true : false)} />
+                </div>
+                <div className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg transition-colors">
+                  <span className="font-semibold text-sm text-gray-700">Transferencia Bancaria</span>
+                  <Toggle value={config.enable_transfer !== false} onChange={() => update('enable_transfer', config.enable_transfer === false ? true : false)} />
+                </div>
+                <div className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg transition-colors">
+                  <span className="font-semibold text-sm text-gray-700">Tarjeta de Crédito / Link</span>
+                  <Toggle value={config.enable_card !== false} onChange={() => update('enable_card', config.enable_card === false ? true : false)} />
+                </div>
+              </div>
+
+              {/* CANALES DE ENTREGA INTERNOS */}
+              <div className="card space-y-4">
+                <div className="flex items-center gap-2 border-b pb-3">
+                  <Truck className="w-5 h-5 text-purple-600" />
+                  <h2 className="font-bold text-gray-700">Canales de Entrega (Web)</h2>
+                </div>
+                <div className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg transition-colors">
+                  <span className="font-semibold text-sm text-gray-700">Local (Comer aquí)</span>
+                  <Toggle value={config.enable_local !== false} onChange={() => update('enable_local', config.enable_local === false ? true : false)} />
+                </div>
+                <div className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg transition-colors">
+                  <span className="font-semibold text-sm text-gray-700">Retiro (Para llevar)</span>
+                  <Toggle value={config.enable_pickup !== false} onChange={() => update('enable_pickup', config.enable_pickup === false ? true : false)} />
+                </div>
+                <div className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg transition-colors">
+                  <span className="font-semibold text-sm text-gray-700">Pedido Directo (Delivery)</span>
+                  <Toggle value={config.enable_delivery !== false} onChange={() => update('enable_delivery', config.enable_delivery === false ? true : false)} />
+                </div>
+              </div>
+            </div>
+          </div>
+          <button onClick={() => guardar('store', config)} disabled={guardando} className="btn-brand flex items-center gap-2">
+            <Save className="w-4 h-4" /> {guardando ? 'Guardando...' : 'Guardar Caja y Pagos'}
+          </button>
+        </div>
+      )}
+
       {/* SUCURSALES */}
       {tab === 'sucursales' && (
         <div className="space-y-4 animate-in fade-in">
@@ -332,7 +422,7 @@ export default function ConfigView() {
 
       {/* APARIENCIA */}
       {tab === 'apariencia' && (
-        <div className="space-y-4">
+        <div className="space-y-4 animate-in fade-in">
           <div className="card space-y-4">
             <h2 className="font-bold text-gray-700">Color principal</h2>
             <div className="flex items-center gap-3">
@@ -371,10 +461,10 @@ export default function ConfigView() {
 
       {/* CANALES */}
       {tab === 'canales' && (
-        <div className="space-y-4">
+        <div className="space-y-4 animate-in fade-in">
           <div className="card space-y-3">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="font-bold text-gray-700">Canales de venta</h2>
+              <h2 className="font-bold text-gray-700">Canales de venta externos</h2>
               <button onClick={() => setModalCanal(true)} className="btn-brand text-sm flex items-center gap-1.5">
                 <Plus className="w-4 h-4" /> Nuevo canal
               </button>
@@ -409,7 +499,7 @@ export default function ConfigView() {
 
       {/* USUARIOS */}
       {tab === 'usuarios' && (
-        <div className="space-y-4">
+        <div className="space-y-4 animate-in fade-in">
           <div className="card space-y-3">
             <div className="flex items-center justify-between mb-2">
               <h2 className="font-bold text-gray-700">Usuarios del sistema</h2>
@@ -438,7 +528,7 @@ export default function ConfigView() {
 
       {/* INTEGRACIONES */}
       {tab === 'integraciones' && (
-        <div className="space-y-4">
+        <div className="space-y-4 animate-in fade-in">
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700 flex gap-2">
             <AlertCircle className="w-5 h-5 shrink-0" />
             <p>Configura los tokens API de cada plataforma. Contáctalas directamente para obtener acceso como partner.</p>
@@ -478,7 +568,7 @@ export default function ConfigView() {
 
       {/* SEGURIDAD */}
       {tab === 'acceso' && (
-        <div className="space-y-4">
+        <div className="space-y-4 animate-in fade-in">
           <div className="card space-y-4">
             <h2 className="font-bold text-gray-700">Cambiar contraseña admin</h2>
             <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-xs text-yellow-700 flex gap-2">

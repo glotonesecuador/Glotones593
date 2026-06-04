@@ -2,16 +2,17 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { Search, ShoppingCart, Plus, Minus, Trash2, Receipt, User, CheckCircle, X, Mail, CreditCard } from 'lucide-react'
-import type { Product, OrderItem, SaleChannel } from '@/types'
+import type { Product, SaleChannel, OrderItem } from '@/types'
 import clsx from 'clsx'
+import ModalPedido from './ModalPedido'
 
 const CHANNELS = [
-  { label: 'Local / Retiro',  value: 'Local'          },
-  { label: 'Pedido Directo',  value: 'Pedido Directo'  },
-  { label: 'PedidosYa',       value: 'PedidosYa',  fee: true },
-  { label: 'Rappi',           value: 'Rappi',      fee: true },
-  { label: 'iFood',           value: 'iFood',      fee: true },
-  { label: 'WhatsApp',        value: 'WhatsApp'        },
+  { label: 'Local / Retiro',   value: 'Local'          },
+  { label: 'Pedido Directo',   value: 'Pedido Directo'  },
+  { label: 'PedidosYa',        value: 'PedidosYa',  fee: true },
+  { label: 'Rappi',            value: 'Rappi',      fee: true },
+  { label: 'iFood',            value: 'iFood',      fee: true },
+  { label: 'WhatsApp',         value: 'WhatsApp'        },
 ]
 
 const METODOS = ['Efectivo', 'Transferencia', 'Tarjeta', 'Payphone']
@@ -25,23 +26,23 @@ export default function VentasPOS() {
   const [channel, setChannel]       = useState<SaleChannel>('Local')
   const [method, setMethod]         = useState('Efectivo')
   const [feePercent, setFeePercent] = useState(0)
-  
-  // Datos del Cliente aplanados
+
   const [nombre, setNombre]         = useState('')
   const [telefono, setTelefono]     = useState('')
   const [cedula, setCedula]         = useState('')
   const [email, setEmail]           = useState('')
-  
+
   const [notas, setNotas]           = useState('')
   const [loading, setLoading]       = useState(true)
   const [saving, setSaving]         = useState(false)
   const [exito, setExito]           = useState('')
   const [historial, setHistorial]   = useState<any[]>([])
   const [verHistorial, setVerHistorial] = useState(false)
-  
-  // Nuevos estados para sucursal y vuelto
+
   const [sucursalActual, setSucursalActual] = useState('todas')
   const [montoRecibido, setMontoRecibido] = useState<number | ''>('')
+
+  const [productoSeleccionado, setProductoSeleccionado] = useState<Product | null>(null)
 
   const cargarProductos = () => {
     fetch('/api/products?admin=1')
@@ -61,10 +62,9 @@ export default function VentasPOS() {
       .then(data => setHistorial(Array.isArray(data) ? data : []))
   }
 
-  useEffect(() => { 
+  useEffect(() => {
     cargarProductos()
     cargarHistorial()
-    // Capturar la sucursal activa al cargar
     const sucursal = localStorage.getItem('sucursal_activa') || 'todas'
     setSucursalActual(sucursal)
   }, [])
@@ -73,26 +73,42 @@ export default function VentasPOS() {
     products.filter(p => {
       if (activeCat !== 'Todas' && p.category !== activeCat) return false
       if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false
-      return true
+      if (p.category === 'Extras') return false
+      return p.active !== false
     }), [products, activeCat, search])
 
-  const agregar = (p: Product) => {
-    setCart(prev => {
-      const ex = prev.find(i => i.id === p.id)
-      if (ex) return prev.map(i => i.id === p.id ? { ...i, quantity: i.quantity + 1 } : i)
-      return [...prev, { id: p.id, name: p.name, price: p.price, quantity: 1, image_url: p.image_url }]
-    })
+  // FIX: eliminado console.log de debug
+  // FIX: usa el tipo OrderItem de @/types (con base_id explícito)
+  const agregarDesdeModal = (item: any) => {
+    const textoExtras = item.extras.length > 0
+      ? ` + ${item.extras.map((e: any) => e.name).join(', ')}`
+      : ''
+
+    const nuevoItem: OrderItem = {
+      id:        item.lineId,
+      base_id:   item.productoBase.id,
+      name:      `${item.productoBase.name}${textoExtras}`,
+      price:     item.subtotal / item.cantidad,
+      quantity:  item.cantidad,
+      image_url: item.productoBase.image_url,
+    }
+
+    setCart(prev => [...prev, nuevoItem])
+    setProductoSeleccionado(null)
   }
 
   const cambiarQty = (id: string, delta: number) => {
-    setCart(prev => prev.map(i => i.id === id ? { ...i, quantity: i.quantity + delta } : i).filter(i => i.quantity > 0))
+    setCart(prev =>
+      prev.map(i => i.id === id ? { ...i, quantity: i.quantity + delta } : i)
+          .filter(i => i.quantity > 0)
+    )
   }
 
   const subtotal = cart.reduce((a, i) => a + i.price * i.quantity, 0)
   const comision = subtotal * (feePercent / 100)
   const total    = subtotal
 
- const cobrar = async () => {
+  const cobrar = async () => {
     if (cart.length === 0) return
     setSaving(true)
 
@@ -102,37 +118,35 @@ export default function VentasPOS() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customer_name: nombre || 'Consumidor Final',
-          phone: telefono || null,
-          cedula: cedula || null,
-          email: email || null,
+          phone:         telefono || null,
+          cedula:        cedula || null,
+          email:         email || null,
           total,
-          net_total: total - comision,
+          net_total:     total - comision,
           channel,
           method,
-          platform_fee: comision,
-          items: cart,
-          notes: notas || null,
-          location_id: sucursalActual === 'todas' ? 'cd-rio-1' : sucursalActual,
-          status: 'Pendiente' // Recuerda que esto asegura que vaya a la cocina
+          platform_fee:  comision,
+          items:         cart,
+          notes:         notas || null,
+          // FIX: 'todas' se manda tal cual; la API convierte a null
+          location_id:   sucursalActual,
+          status:        'Pendiente',
         }),
       })
 
       if (res.ok) {
-        // ✨ LA MAGIA DEL CRM AQUÍ ✨
-        // Si el cajero ingresó un teléfono, lo guardamos o actualizamos en el CRM
         if (telefono) {
           await fetch('/api/customers', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               phone: telefono,
-              name: nombre || 'Consumidor Final',
-              email: email || null
-            })
-          }).catch(err => console.log("Error silencioso CRM:", err))
+              name:  nombre || 'Consumidor Final',
+              email: email || null,
+            }),
+          }).catch(err => console.error('Error CRM:', err))
         }
 
-        // Limpiar el formulario
         setCart([])
         setNombre('')
         setTelefono('')
@@ -145,11 +159,12 @@ export default function VentasPOS() {
         cargarHistorial()
       }
     } catch (error) {
-      console.error("Error al cobrar:", error)
+      console.error('Error al cobrar:', error)
     } finally {
       setSaving(false)
     }
   }
+
   if (loading) return (
     <div className="h-full flex items-center justify-center">
       <div className="w-10 h-10 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin" />
@@ -158,7 +173,6 @@ export default function VentasPOS() {
 
   return (
     <div className="h-full flex overflow-hidden relative">
-      {/* PRODUCTOS */}
       <div className="flex-1 flex flex-col overflow-hidden border-r border-gray-200">
         <div className="bg-white px-4 pt-4 pb-3 border-b space-y-3">
           <div className="flex gap-3">
@@ -173,7 +187,7 @@ export default function VentasPOS() {
             </select>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {categories.map(cat => (
+            {categories.filter(c => c !== 'Extras').map(cat => (
               <button key={cat} onClick={() => setActiveCat(cat)}
                 className={clsx('shrink-0 px-4 py-1.5 rounded-full text-xs font-semibold transition-all',
                   activeCat === cat ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
@@ -186,17 +200,17 @@ export default function VentasPOS() {
         <div className="flex-1 overflow-y-auto p-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
             {filtrados.map(p => {
-              const enCarrito = cart.find(i => i.id === p.id)
+              const cantTotal = cart.filter(i => i.base_id === p.id).reduce((s, i) => s + i.quantity, 0)
               return (
-                <button key={p.id} onClick={() => agregar(p)}
+                <button key={p.id} onClick={() => setProductoSeleccionado(p)}
                   className={clsx('relative bg-white rounded-2xl overflow-hidden shadow-sm border text-left hover:shadow-md active:scale-[0.98] transition-all',
-                    enCarrito ? 'border-purple-300 ring-2 ring-purple-200' : 'border-gray-100')}>
+                    cantTotal > 0 ? 'border-purple-300 ring-2 ring-purple-200' : 'border-gray-100')}>
                   {p.discount_pct > 0 && (
                     <span className="absolute top-2 left-2 z-10 badge bg-red-500 text-white">-{p.discount_pct}%</span>
                   )}
-                  {enCarrito && (
+                  {cantTotal > 0 && (
                     <span className="absolute top-2 right-2 z-10 w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center text-xs font-bold">
-                      {enCarrito.quantity}
+                      {cantTotal}
                     </span>
                   )}
                   <div className="aspect-square bg-gray-100">
@@ -215,7 +229,6 @@ export default function VentasPOS() {
         </div>
       </div>
 
-      {/* TICKET */}
       <div className="w-80 xl:w-[400px] flex flex-col bg-white overflow-hidden shadow-xl z-10">
         <div className="flex items-center justify-between px-4 py-3 bg-purple-700 text-white">
           <div className="flex flex-col">
@@ -268,7 +281,7 @@ export default function VentasPOS() {
                 ? <img src={item.image_url} className="w-10 h-10 rounded-lg object-cover shrink-0" />
                 : <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 text-xl">🍔</div>}
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-gray-800 truncate uppercase">{item.name}</p>
+                <p className="text-[11px] font-bold text-gray-800 leading-tight uppercase">{item.name}</p>
                 <p className="text-[10px] text-gray-500 font-semibold">${item.price.toFixed(2)} c/u</p>
               </div>
               <div className="flex items-center gap-1 shrink-0 bg-gray-50 rounded-lg p-0.5 border border-gray-100">
@@ -290,7 +303,7 @@ export default function VentasPOS() {
         <div className="px-4 pb-4 pt-3 border-t bg-white space-y-3 shrink-0">
           <div className="flex gap-1.5 flex-wrap">
             {METODOS.map(m => (
-              <button key={m} onClick={() => { setMethod(m); setMontoRecibido(''); }}
+              <button key={m} onClick={() => { setMethod(m); setMontoRecibido('') }}
                 className={clsx('flex-1 min-w-[70px] py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border',
                   method === m ? 'bg-purple-600 border-purple-600 text-white shadow-md' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50')}>
                 {m}
@@ -298,7 +311,6 @@ export default function VentasPOS() {
             ))}
           </div>
 
-          {/* CALCULADORA DE VUELTO (Solo si es Efectivo) */}
           {method === 'Efectivo' && cart.length > 0 && (
             <div className="bg-green-50 p-3 rounded-xl border border-green-200 flex flex-col gap-2 animate-in fade-in zoom-in-95">
               <div className="flex justify-between items-center">
@@ -351,7 +363,6 @@ export default function VentasPOS() {
         </div>
       </div>
 
-      {/* PANEL HISTORIAL */}
       {verHistorial && (
         <div className="absolute inset-0 z-50 flex justify-end">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setVerHistorial(false)} />
@@ -374,15 +385,20 @@ export default function VentasPOS() {
                   <p className="text-[10px] font-bold text-gray-500 uppercase leading-relaxed">
                     {Array.isArray(order.items) ? order.items.map((i: any) => `${i.name} (x${i.quantity})`).join(' • ') : '—'}
                   </p>
-                  <div className="flex gap-2 mt-2">
-                    <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-[9px] font-black uppercase">{order.channel}</span>
-                    <span className="bg-green-50 text-green-600 px-2 py-0.5 rounded text-[9px] font-black uppercase">{order.method}</span>
-                  </div>
                 </div>
               ))}
             </div>
           </div>
         </div>
+      )}
+
+      {productoSeleccionado && (
+        <ModalPedido
+          producto={productoSeleccionado}
+          extrasDisponibles={products.filter(p => p.category?.trim().toLowerCase() === 'extras')}
+          alAgregar={agregarDesdeModal}
+          cerrar={() => setProductoSeleccionado(null)}
+        />
       )}
     </div>
   )

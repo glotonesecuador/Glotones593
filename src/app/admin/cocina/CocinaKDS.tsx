@@ -62,7 +62,8 @@ function TarjetaPedido({ order, onAvanzar, actualizando, catalogo }: { order: Or
 
       <div className="p-4 space-y-3">
         {Array.isArray(order.items) && order.items.map((item: any, i: number) => {
-          const prod = catalogo.find(p => p.id === item.id)
+          // FIX: buscar por base_id (ID del producto original), no por id (lineId único de carrito)
+          const prod = catalogo.find(p => p.id === (item.base_id ?? item.id))
           return (
             <div key={i} className="flex items-start gap-3 border-b border-gray-50 pb-3 last:border-0 last:pb-0">
               <span className={clsx("shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-sm font-black", isCompletado ? "bg-gray-100 text-gray-500" : "bg-purple-100 text-purple-700")}>

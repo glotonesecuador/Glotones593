@@ -45,9 +45,23 @@ export default function InventarioView() {
   }
 
   const eliminar = async (id: string) => {
-    if (!confirm('¿Eliminar este ingrediente?')) return
-    await fetch(`/api/ingredients/${id}`, { method: 'DELETE' })
-    cargar()
+    if (!confirm('¿Estás seguro de eliminar este ítem?')) return
+    
+    try {
+      const res = await fetch(`/api/ingredients/${id}`, { method: 'DELETE' })
+      
+      if (res.ok) {
+        // alert('Eliminado exitosamente') // Opcional
+        cargar()
+      } else {
+        // Si falla, leemos el error que manda el servidor
+        const errorData = await res.json()
+        alert(`No se pudo eliminar. Error: ${errorData.error || errorData.message || 'Error desconocido'}`)
+      }
+    } catch (error) {
+      console.error("Fallo de red:", error)
+      alert('Error de conexión al intentar eliminar.')
+    }
   }
 
   const filtrados = items.filter(i => {

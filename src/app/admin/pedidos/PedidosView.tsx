@@ -5,7 +5,7 @@ import {
   RefreshCw, XCircle, Search, Clock, ChefHat, 
   CheckCircle, Truck, Bell, Plus, Smartphone, 
   Store, DollarSign, ShoppingBag, Filter, Trash2,
-  Calendar, Download, X // Agregados para los nuevos filtros
+  Calendar, Download, X, Eye // <-- Agregado Eye para el recibo
 } from 'lucide-react'
 import type { Order, OrderStatus, Product } from '@/types'
 import clsx from 'clsx'
@@ -75,6 +75,9 @@ export default function PedidosView() {
   const [listaCanales, setListaCanales] = useState<any[]>([])
   const [menuProductos, setMenuProductos] = useState<Product[]>([])
   const [modalManual, setModalManual] = useState(false)
+
+  // ESTADO PARA EL MODAL DE COMPROBANTE
+  const [comprobanteImg, setComprobanteImg] = useState<string | null>(null)
 
   // NUEVOS ESTADOS PARA FILTROS DE FECHA
   const [desde, setDesde] = useState('')
@@ -368,7 +371,15 @@ export default function PedidosView() {
                   </div>
                   <div className="flex-1 overflow-y-auto p-3 space-y-3">
                     {lista.map(order => (
-                      <OrderCard key={order.id} order={order} col={col} onAvanzar={avanzar} onCancelar={cancelar} actualizando={actualizando} />
+                      <OrderCard 
+                        key={order.id} 
+                        order={order} 
+                        col={col} 
+                        onAvanzar={avanzar} 
+                        onCancelar={cancelar} 
+                        actualizando={actualizando} 
+                        onVerComprobante={setComprobanteImg} // <-- Pasamos el prop
+                      />
                     ))}
                   </div>
                 </div>
@@ -428,6 +439,26 @@ export default function PedidosView() {
           </div>
         )}
       </div>
+
+      {/* MODAL PARA VER LA IMAGEN DEL COMPROBANTE DE TRANSFERENCIA */}
+      {comprobanteImg && (
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl overflow-hidden shadow-2xl max-w-md w-full relative animate-in zoom-in-95">
+            <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+              <h3 className="font-black uppercase tracking-widest text-xs text-gray-700">Comprobante de Pago</h3>
+              <button onClick={() => setComprobanteImg(null)} className="p-1 hover:bg-gray-200 rounded-full transition-colors"><XCircle className="w-6 h-6 text-gray-500" /></button>
+            </div>
+            <div className="p-4 flex justify-center bg-gray-100 h-[60vh]">
+              <img src={comprobanteImg} className="w-full h-full object-contain" alt="Comprobante" />
+            </div>
+            <div className="p-4">
+              <button onClick={() => setComprobanteImg(null)} className="w-full bg-gray-900 text-white font-black py-3 rounded-xl uppercase tracking-widest text-xs active:scale-95 transition-all">
+                Cerrar Imagen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modalManual && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -505,11 +536,17 @@ export default function PedidosView() {
   )
 }
 
-function OrderCard({ order, col, onAvanzar, onCancelar, actualizando }: { order: Order, col: any, onAvanzar: any, onCancelar: any, actualizando: any }) {
+function OrderCard({ order, col, onAvanzar, onCancelar, actualizando, onVerComprobante }: { order: Order, col: any, onAvanzar: any, onCancelar: any, actualizando: any, onVerComprobante: (url: string) => void }) {
   const elapsed = useTimer(order.created_at); 
   const urgente = elapsed > 10 * 60; 
   const warning = elapsed > 5 * 60;
   
+  // LOGICA PARA LEER EL COMPROBANTE
+  const tieneComprobante = order.notes?.includes('🧾 [COMPROBANTE ADJUNTO]:')
+  const partesNota = order.notes?.split('🧾 [COMPROBANTE ADJUNTO]:')
+  const notaReal = partesNota?.[0]?.trim()
+  const urlComprobante = partesNota?.[1]?.trim()
+
   return (
     <div className={clsx('bg-white rounded-2xl overflow-hidden shadow-sm border-2 transition-all animate-in zoom-in-95', 
       urgente ? 'border-red-400 shadow-red-100' : warning ? 'border-yellow-300' : col.color)}>
@@ -531,8 +568,24 @@ function OrderCard({ order, col, onAvanzar, onCancelar, actualizando }: { order:
             <span className="font-black text-gray-800 text-[10px] uppercase truncate tracking-tight">{item.name}</span>
           </div>
         ))}
-        {order.notes && <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-2 py-1.5 mt-1 shadow-inner"><p className="text-[10px] font-bold text-yellow-800 leading-tight italic lowercase">{order.notes}</p></div>}
-        {order.phone && <p className="text-[9px] font-black text-gray-400 text-right tracking-tighter">📞 {order.phone}</p>}
+        
+        {/* RENDERIZADO DE NOTAS Y BOTON DE RECIBO */}
+        {notaReal && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-2 py-1.5 mt-1 shadow-inner">
+            <p className="text-[10px] font-bold text-yellow-800 leading-tight italic lowercase">{notaReal}</p>
+          </div>
+        )}
+        
+        {tieneComprobante && urlComprobante && (
+          <button 
+            onClick={() => onVerComprobante(urlComprobante)}
+            className="mt-2 w-full flex items-center justify-center gap-1.5 bg-purple-100 hover:bg-purple-200 text-purple-700 px-3 py-2 rounded-xl shadow-sm border border-purple-200 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95"
+          >
+            <Eye className="w-3.5 h-3.5" /> Ver Comprobante
+          </button>
+        )}
+
+        {order.phone && <p className="text-[9px] font-black text-gray-400 text-right tracking-tighter mt-2">📞 {order.phone}</p>}
       </div>
       <div className="px-4 pb-4 flex gap-2">
         <button onClick={() => onAvanzar(order.id, col.next)} disabled={actualizando === order.id} className={clsx('flex-1 py-3 rounded-xl text-white font-black text-[10px] uppercase tracking-[0.1em] transition-all shadow-md active:scale-95 disabled:opacity-60', col.btnColor)}>

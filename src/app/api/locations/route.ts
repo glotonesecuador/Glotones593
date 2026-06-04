@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
       id: body.id,
       name: body.name,
       address: body.address || null,
+      phone: body.phone || null,   // teléfono WhatsApp de esta sucursal
       active: body.active ?? true
     }
 

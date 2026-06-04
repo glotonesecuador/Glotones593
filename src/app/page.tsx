@@ -23,6 +23,8 @@ import clsx from 'clsx'
 export default function MenuPublico() {
   const [sucursales, setSucursales]   = useState<any[]>([])
   const [sucursalActual, setSucursalActual] = useState('')
+  // true = mostrar modal de selección de sucursal al entrar
+  const [sucursalModal, setSucursalModal] = useState(true)
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<string[]>([])
   const [activeCat, setActiveCat] = useState('Todas')
@@ -79,11 +81,11 @@ export default function MenuPublico() {
         }
       }
 
-      // <-- 2. Guardamos las sucursales y seleccionamos la primera por defecto
+      // Guardamos las sucursales; la selección la hace el modal de bienvenida
       if (Array.isArray(locs) && locs.length > 0) {
         const activas = locs.filter(l => l.active !== false);
         setSucursales(activas);
-        setSucursalActual(activas[0].id); // Por defecto agarrará 'cd-rio-1' u otra que tengas
+        // No auto-seleccionamos: el cliente elige en el modal
       }
 
       setLoading(false)
@@ -314,6 +316,78 @@ export default function MenuPublico() {
     )
   }
 
+  // Modal de bienvenida: el cliente elige su sucursal (norte/sur) antes de ver el menú
+  if (sucursalModal && sucursales.length > 0) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center p-4"
+        style={{ background: `linear-gradient(160deg, ${color} 0%, ${colorDark} 100%)` }}
+      >
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-300">
+          {/* Header */}
+          <div className="p-8 pb-6 text-center" style={{ backgroundColor: color }}>
+            {config.logoUrl ? (
+              <img
+                src={config.logoUrl}
+                className="w-20 h-20 rounded-full object-contain bg-white border-4 border-white/30 mx-auto mb-4 shadow-lg"
+                alt="Logo"
+              />
+            ) : (
+              <div className="w-20 h-20 rounded-full bg-white/20 border-4 border-white/30 mx-auto mb-4 flex items-center justify-center shadow-lg">
+                <span className="text-4xl font-black text-white">G</span>
+              </div>
+            )}
+            <h1 className="text-2xl font-black text-white uppercase tracking-tight">
+              {config.name || 'Glotones'}
+            </h1>
+            <p className="text-white/70 text-xs font-bold mt-1 uppercase tracking-widest">
+              ¿Dónde estás tú?
+            </p>
+          </div>
+
+          {/* Opciones de sucursal */}
+          <div className="p-6 space-y-3">
+            <p className="text-center text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">
+              Elige tu local más cercano
+            </p>
+            {sucursales.map((suc) => (
+              <button
+                key={suc.id}
+                onClick={() => {
+                  setSucursalActual(suc.id)
+                  setSucursalModal(false)
+                }}
+                className="w-full flex items-center gap-4 p-5 rounded-2xl border-2 border-gray-100 hover:border-purple-300 active:scale-[0.98] transition-all group text-left"
+              >
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 text-white text-2xl font-black shadow-md group-hover:scale-110 transition-transform"
+                  style={{ backgroundColor: color }}
+                >
+                  📍
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-gray-800 text-base leading-tight">{suc.name}</p>
+                  {suc.address && (
+                    <p className="text-xs text-gray-400 font-medium mt-0.5 truncate">{suc.address}</p>
+                  )}
+                </div>
+                <svg className="w-5 h-5 text-gray-300 group-hover:text-purple-400 shrink-0 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            ))}
+          </div>
+
+          <div className="px-6 pb-6">
+            <p className="text-center text-[10px] text-gray-300 font-bold uppercase tracking-widest">
+              Tu pedido irá al WhatsApp del local elegido
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (step === 'success') {
     // Generamos el texto automático para WhatsApp
     const mensajeWa = encodeURIComponent(
@@ -323,8 +397,9 @@ export default function MenuPublico() {
       `💰 *Total a pagar:* $${cartTotal.toFixed(2)}\n\n` +
       (method === 'Tarjeta' ? `👉 *Por favor envíenme el link de pagos para procesar la tarjeta.*` : `¡Quedo atento a la confirmación!`)
     );
-    // Asume el número configurado o uno por defecto de respaldo
-    const numeroWa = config.phone || '0939013199'; 
+    // Usar el teléfono de la sucursal elegida, con fallback al global
+    const sucursalElegida = sucursales.find(s => s.id === sucursalActual);
+    const numeroWa = sucursalElegida?.phone || config.phone || '0939013199';
     const linkWa = `https://wa.me/593${numeroWa}?text=${mensajeWa}`;
 
     return (
@@ -1279,9 +1354,9 @@ export default function MenuPublico() {
       )}
 
       {/* Botón flotante WhatsApp */}
-      {config.phone && (
+      {(sucursales.find(s => s.id === sucursalActual)?.phone || config.phone) && (
         <a
-          href={`https://wa.me/593${config.phone}`}
+          href={`https://wa.me/593${sucursales.find(s => s.id === sucursalActual)?.phone || config.phone}`}
           target="_blank"
           rel="noopener noreferrer"
           className={clsx(

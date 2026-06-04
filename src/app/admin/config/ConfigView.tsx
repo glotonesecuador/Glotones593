@@ -32,7 +32,7 @@ const CANALES_DEFAULT = [
 
 interface Canal    { id: string; name: string; fee: number; active: boolean; builtin: boolean }
 interface Usuario  { id: string; name: string; email: string; role: string; active: boolean }
-interface Sucursal { id: string; name: string; address: string; active: boolean }
+interface Sucursal { id: string; name: string; address: string; phone: string; active: boolean }
 
 export default function ConfigView() {
   const [tab, setTab]             = useState('tienda')
@@ -78,7 +78,7 @@ export default function ConfigView() {
   // ESTADOS PARA SUCURSALES
   const [sucursales, setSucursales]   = useState<Sucursal[]>([])
   const [modalSucursal, setModalSucursal] = useState({ open: false, isEdit: false })
-  const [nuevaSucursal, setNuevaSucursal] = useState<Sucursal>({ id: '', name: '', address: '', active: true })
+  const [nuevaSucursal, setNuevaSucursal] = useState<Sucursal>({ id: '', name: '', address: '', phone: '', active: true })
 
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then(data => {
@@ -128,7 +128,7 @@ export default function ConfigView() {
       body: JSON.stringify(nuevaSucursal),
     })
     setModalSucursal({ open: false, isEdit: false })
-    setNuevaSucursal({ id: '', name: '', address: '', active: true })
+    setNuevaSucursal({ id: '', name: '', address: '', phone: '', active: true })
     
     // Recargar lista
     const res = await fetch('/api/locations')
@@ -398,6 +398,7 @@ export default function ConfigView() {
                     <td className="px-6 py-4">
                       <p className="text-gray-900">{s.name}</p>
                       <p className="text-[9px] text-gray-400 normal-case italic font-medium">{s.address}</p>
+                      {s.phone && <p className="text-[9px] text-green-600 font-black normal-case">📱 {s.phone}</p>}
                     </td>
                     <td className="px-6 py-4 text-center">
                       <span className={clsx("px-2 py-1 rounded-lg", s.active ? "bg-green-50 text-green-600" : "bg-red-50 text-red-500")}>
@@ -649,6 +650,11 @@ export default function ConfigView() {
                <div><label className="text-[10px] font-black text-gray-400 uppercase block mb-1">ID Único (slug)</label><input value={nuevaSucursal.id} disabled={modalSucursal.isEdit} onChange={e => setNuevaSucursal({...nuevaSucursal, id: e.target.value})} className="input-field" placeholder="sur-1" /></div>
                <div><label className="text-[10px] font-black text-gray-400 uppercase block mb-1">Nombre Comercial</label><input value={nuevaSucursal.name} onChange={e => setNuevaSucursal({...nuevaSucursal, name: e.target.value})} className="input-field" placeholder="Glotones Sur" /></div>
                <div><label className="text-[10px] font-black text-gray-400 uppercase block mb-1">Dirección</label><input value={nuevaSucursal.address} onChange={e => setNuevaSucursal({...nuevaSucursal, address: e.target.value})} className="input-field" placeholder="Av. Principal..." /></div>
+               <div>
+                 <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">WhatsApp de esta sucursal</label>
+                 <input value={nuevaSucursal.phone} onChange={e => setNuevaSucursal({...nuevaSucursal, phone: e.target.value})} className="input-field" placeholder="09XXXXXXXX" type="tel" />
+                 <p className="text-[9px] text-gray-400 mt-1 font-medium">Los pedidos online de este local irán a este número</p>
+               </div>
                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl">
                  <span className="text-[10px] font-black text-gray-500 uppercase">Activa</span>
                  <Toggle value={nuevaSucursal.active} onChange={() => setNuevaSucursal({...nuevaSucursal, active: !nuevaSucursal.active})} />

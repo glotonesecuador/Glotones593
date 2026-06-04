@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 
+// GET: solo admin autenticado puede leer órdenes
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
@@ -32,17 +33,21 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(data)
 }
 
+// POST: público (tienda web) + admin autenticado pueden crear órdenes.
+// Protección anti-spam: campos obligatorios validados en servidor.
 export async function POST(req: NextRequest) {
-  // FIX: verificar sesión igual que GET
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-
   const body = await req.json()
-  const db   = supabaseAdmin()
 
-  // FIX: location_id ya no tiene el fallback hardcodeado 'cd-rio-1'
-  // Si viene 'todas' o nulo, se guarda null para que el filtro por sucursal
-  // no excluya la orden de ninguna vista
+  // Validación mínima: no aceptar órdenes vacías ni sin total
+  if (!body.items || !Array.isArray(body.items) || body.items.length === 0) {
+    return NextResponse.json({ error: 'El pedido debe tener al menos un producto' }, { status: 400 })
+  }
+  if (!body.total || isNaN(Number(body.total)) || Number(body.total) <= 0) {
+    return NextResponse.json({ error: 'Total inválido' }, { status: 400 })
+  }
+
+  const db = supabaseAdmin()
+
   const location_id = body.location_id && body.location_id !== 'todas'
     ? body.location_id
     : null

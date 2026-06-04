@@ -316,8 +316,15 @@ export default function MenuPublico() {
     )
   }
 
-  // Modal de bienvenida: el cliente elige su sucursal (norte/sur) antes de ver el menú
-  if (sucursalModal && sucursales.length > 0) {
+  // Sucursales con fallback hardcodeado: si la DB no tiene datos, usamos estos.
+  // Cuando la DB esté cargada, sucursales[] los reemplaza automáticamente.
+  const sucursalesFallback = sucursales.length > 0 ? sucursales : [
+    { id: 'norte-1', name: 'Glotones Norte', address: '', phone: '0939013199', active: true },
+    { id: 'sur-1',   name: 'Glotones Sur',   address: '', phone: '0983809283', active: true },
+  ]
+
+  // Modal de bienvenida: siempre aparece al entrar (sucursalModal = true por defecto)
+  if (sucursalModal) {
     return (
       <div
         className="min-h-screen flex items-center justify-center p-4"
@@ -350,7 +357,7 @@ export default function MenuPublico() {
             <p className="text-center text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">
               Elige tu local más cercano
             </p>
-            {sucursales.map((suc) => (
+            {sucursalesFallback.map((suc) => (
               <button
                 key={suc.id}
                 onClick={() => {
@@ -398,7 +405,7 @@ export default function MenuPublico() {
       (method === 'Tarjeta' ? `👉 *Por favor envíenme el link de pagos para procesar la tarjeta.*` : `¡Quedo atento a la confirmación!`)
     );
     // Usar el teléfono de la sucursal elegida, con fallback al global
-    const sucursalElegida = sucursales.find(s => s.id === sucursalActual);
+    const sucursalElegida = sucursalesFallback.find(s => s.id === sucursalActual);
     const numeroWa = sucursalElegida?.phone || config.phone || '0939013199';
     const linkWa = `https://wa.me/593${numeroWa}?text=${mensajeWa}`;
 
@@ -1354,9 +1361,9 @@ export default function MenuPublico() {
       )}
 
       {/* Botón flotante WhatsApp */}
-      {(sucursales.find(s => s.id === sucursalActual)?.phone || config.phone) && (
+      {(sucursalesFallback.find(s => s.id === sucursalActual)?.phone || config.phone) && (
         <a
-          href={`https://wa.me/593${sucursales.find(s => s.id === sucursalActual)?.phone || config.phone}`}
+          href={`https://wa.me/593${sucursalesFallback.find(s => s.id === sucursalActual)?.phone || config.phone}`}
           target="_blank"
           rel="noopener noreferrer"
           className={clsx(
